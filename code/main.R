@@ -1,5 +1,8 @@
 ## DEFINE CONSTANTS
 
+# Define seconds per year for conversions.
+spy <- 60 * 60 * 24 * 365.25
+
 # "The IPCC authors concluded that ECS is very likely to be greater than 1.5 °C
 # (2.7 °F) and likely to lie in the range 2 to 4.5 °C (3.6 to 8.1 °F), with a
 # most likely value of about 3 °C (5.4 °F)."
@@ -19,7 +22,7 @@ hd <- 900  # m  (range 500-4000)
 # Vertical diffusivity
 kappa <- 1  # cm^2 / s   (range 0.2 - 2)
 kappa <- kappa * 10e-4   # convert to m^2 / s
-kappa <- kappa * 60*60*24*365   # convert to m^2 / year
+kappa <- kappa * spy   # convert to m^2 / year
 
 # Heat diffusion coefficient
 gamma <- 2 * kappa * cp * rho / (hu + hd)   # J / deg / m^2 / year
@@ -47,6 +50,8 @@ simulate <- function(
     tu <- td <- rep(NA, years + 1)
     # Anomaly for the first year is 0, this is the reference year.
     tu[1] <- td[1] <- 0
+    # Convert forcing to J / year.
+    forcing <- forcing * spy
     # Iterate.
     for (i in 1:years) {
         # Update the upper and deep layers.
@@ -72,4 +77,4 @@ forcing <- data$total
 out <- simulate(forcing, alpha, gamma, cu, cd)
 
 # Plot the temperatures of the upper layer.
-plot(x = out$year, y = out$tu)
+plot(x = out$year, y = out$tu, type = "l")
