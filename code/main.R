@@ -58,11 +58,15 @@ simulate <- function(
     ))
 }
 
-## READ THE DATA
+## RUN THE SIMULATION
 # This is the forcing data for the SSP119 scenario from 1750-2500.
 data <- read.csv("data/SSPs/ERF_ssp119_1750-2500.csv")
+
+# Use the total forcing values
 forcing <- data$total
 
+# Run the simulation.
 out <- simulate(forcing, alpha, gamma, cu, cd)
 
+# Plot the temperatures of the upper layer.
 plot(x = out$year, y = out$tu)
