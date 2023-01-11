@@ -18,7 +18,7 @@ hd <- 900  # m  (range 500-4000)
 
 # Vertical diffusivity
 kappa <- 1  # cm^2 / s   (range 0.2 - 2)
-kappa <- kappa * 10e-5   # convert to m^2 / s
+kappa <- kappa * 10e-4   # convert to m^2 / s
 kappa <- kappa * 60*60*24*365   # convert to m^2 / year
 
 # Heat diffusion coefficient
@@ -63,7 +63,7 @@ simulate <- function(
 
 ## RUN THE SIMULATION
 # This is the forcing data for the SSP119 scenario from 1750-2500.
-data <- read.csv("data/SSPs/ERF_ssp585_1750-2500.csv")
+data <- read.csv("data/SSPs/ERF_ssp119_1750-2500.csv")
 
 # Use the total forcing values
 forcing <- data$total
