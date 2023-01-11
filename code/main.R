@@ -19,15 +19,18 @@ hd <- 900  # m  (range 500-4000)
 # Vertical diffusivity
 kappa <- 1  # cm^2 / s   (range 0.2 - 2)
 kappa <- kappa * 10e-5   # convert to m^2 / s
+kappa <- kappa * 60*60*24*365   # convert to m^2 / year
 
 # Heat diffusion coefficient
-gamma <- 2 * kappa * cp * rho / (hu + hd)
+gamma <- 2 * kappa * cp * rho / (hu + hd)   # J / deg / m^2 / year
 
 # Thermal inertia for the upper and deep layers
-cu <- rho * cp * hu
-cd <- rho * cp * hd
+cu <- rho * cp * hu   # J / m^2 / deg
+cd <- rho * cp * hd   # J / m^2 / deg
 
 ## DO THE SIMULATION
+# Equations from "The inconstancy of the transient climate response
+# parameter under increasing CO2", Gregory et al., 2017.
 simulate <- function(
     # A vector containing total forcing values for the time period of interest.
     forcing,
@@ -48,8 +51,8 @@ simulate <- function(
     for (i in 1:years) {
         # Update the upper and deep layers.
         tu[i + 1] <-
-            tu[i] + (forcing[i] - alpha * tu[i] - gamma * (tu[i] - td[i])) / cu
-        td[i + 1] <- td[i] + gamma * (tu[i] - td[i]) / cd
+            tu[i] + (forcing[i] + alpha * tu[i] - gamma * (tu[i] - td[i])) / cu
+        td[i + 1] <- td[i] + (gamma * (tu[i] - td[i])) / cd
     }
     return(data.frame(
         year = 1750 + 0:years,
@@ -60,7 +63,7 @@ simulate <- function(
 
 ## RUN THE SIMULATION
 # This is the forcing data for the SSP119 scenario from 1750-2500.
-data <- read.csv("data/SSPs/ERF_ssp119_1750-2500.csv")
+data <- read.csv("data/SSPs/ERF_ssp585_1750-2500.csv")
 
 # Use the total forcing values
 forcing <- data$total
