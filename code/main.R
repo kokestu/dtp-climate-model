@@ -73,14 +73,74 @@ simulate <- function(
 }
 
 ## RUN THE SIMULATION
-# This is the forcing data for the SSP119 scenario from 1750-2500.
-data <- read.csv("data/SSPs/ERF_ssp119_1750-2500.csv")
+ssps <- c(
+    "ssp119", "ssp126", "ssp245", "ssp370", "ssp434", "ssp460", "ssp585"
+)
 
-# Use the total forcing values
-forcing <- data$total
+results <- list()
+for (ssp in ssps) {
+    # Read the forcing data
+    data <- read.csv(paste(
+        "data/SSPs/ERF_", ssp, "_1750-2500.csv",
+        sep = ""
+    ))
+    # Use the total forcing values
+    forcing <- data$total
+    # Run the simulation.
+    results[[ssp]] <- simulate(
+        forcing, alpha, gamma, cu, cd, tr = 60 * 60 * 24 * 365
+    )
+}
 
-# Run the simulation.
-out <- simulate(forcing, alpha, gamma, cu, cd)
+# Plot the temperatures of the upper layer, and save the data.
+pdf(file = "output/projections.pdf")
+n_lines <- length(results)
+colors <- rainbow(n_lines)
+plot(
+    1, type = "n",
+    xlim = c(1750, 2501), ylim = range(results$ssp585$tu),
+    xlab = "Year", ylab = "Temperature anomaly (relative to 1750)",
+    main = "Model temperature anomaly projections, relative to 1750"
+)
+for (i in 1:n_lines) {
+    lines(results[[i]]$year, results[[i]]$tu, type = "l", col = colors[i])
+    # Save the data.
+    write.csv(
+        result, file = paste(
+            "output/", names(results)[i], ".csv",
+            sep = ""
+        ), quote = FALSE, row.names = FALSE
+    )
+}
+legend("topleft", legend = names(results), fill = colors)
+dev.off()
 
-# Plot the temperatures of the upper layer.
-plot(x = out$year, y = out$tu, type = "l")
+## COMPARE THE MODEL TO MEASUREMENTS
+out <- results[1]
+
+# This is the MET office data.
+validation_data <- read.csv("data/HadCRUT.5.0.1.0.summary_series.global.annual.csv")
+
+# This is our data in the same range.
+model_data <- out$tu[out$year %in% validation_data$Time]
+
+# MET data is anomaly relative to 1961-1990, so let's correct our outputs to that.
+baseline <- mean(out$tu[out$year %in% 1961:1990])
+model_data <- model_data - baseline
+
+# Plot.
+pdf(file = "output/validate.pdf")
+plot(
+    1850:2022, validation_data$Anomaly..deg.C.,
+    col = "red",
+    xlab = "Year",
+    ylab = "Anomaly (relative to 1961-1990)",
+    main = "Temperature anomaly relative to 1961-1990"
+)
+lines(1850:2022, model_data, col = "blue")
+legend(
+    "topleft",
+    legend = c("MET measurements", "Model prediction"),
+    fill = c("red", "blue")
+)
+dev.off()
