@@ -242,7 +242,7 @@ run_for_ssps(
             veg_t_saved * pop_data[
                 pop_data$year %in% rnge,
                 substr(scenario, start = 1, stop = 4)
-            ]
+            ] * 1e6   # the data is in millions
         )
         # Return the total values.
         c(past, future)
