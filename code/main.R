@@ -168,7 +168,7 @@ dev.off()
 methane_scaling <- 1 - 0.32
 
 run_for_ssps(
-    "Model temperature anomaly projections, under a reduced methane scenario",
+    "Model temperature anomaly projections, under a \nreduced methane scenario",
     get_forcings = function(data) {
         # Drop unnecessary columns.
         reduced <- subset(
