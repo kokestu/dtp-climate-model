@@ -4,7 +4,7 @@
 # (2.7 °F) and likely to lie in the range 2 to 4.5 °C (3.6 to 8.1 °F), with a
 # most likely value of about 3 °C (5.4 °F)."
 ecs <- 3   # deg
-alpha <- -3.93 / ecs   # deg^-1
+alpha <- -3.93 / ecs   # W / m^2 / deg
 
 # Density of seawater
 rho <- 1027   # kg / m^3
@@ -59,8 +59,8 @@ simulate <- function(
         for (j in 1:(spy / tr)) {
             # Update the upper and deep layers.
             tu_cur <-
-                tu_cur + (forcing[i] * tr + alpha * tu_cur - gamma * tr * (tu_cur - td_cur)) / cu
-            td_cur <- td_cur + (gamma * tr * (tu_cur - td_cur)) / cd
+                tu_cur + tr * (forcing[i] + alpha * tu_cur - gamma * (tu_cur - td_cur)) / cu
+            td_cur <- td_cur + tr * (gamma * (tu_cur - td_cur)) / cd
         }
         tu[i + 1] <- tu_cur
         td[i + 1] <- td_cur
