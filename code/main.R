@@ -78,9 +78,12 @@ run_for_ssps <- function(
     plot_title,
     # Function to extract the forcing values from the data. Defaults to just
     # using the total forcing values.
-    get_forcings = function(x) { x$total },
+    get_forcings = function(x, scenario) { x$total },
     # Suffix to add to the output filenames. Defaults to an empty string.
-    file_suffix = ""
+    file_suffix = "",
+    # Set a custom range for the y axis of the plot. Defaults to scaling with
+    # the data.
+    ylim = NULL
 ) {
     ssps <- c(
         "ssp119", "ssp126", "ssp245", "ssp370", "ssp434", "ssp460", "ssp585"
@@ -94,7 +97,7 @@ run_for_ssps <- function(
             sep = ""
         ))
         # Extract the values for the forcing.
-        forcing <- get_forcings(data)
+        forcing <- get_forcings(data, ssp)
         # Run the simulation.
         results[[ssp]] <- simulate(
             forcing, alpha, gamma, cu, cd, tr = 60 * 60 * 24 * 365
@@ -107,7 +110,8 @@ run_for_ssps <- function(
     colors <- rainbow(n_lines)
     plot(
         1, type = "n",
-        xlim = c(1750, 2501), ylim = range(results$ssp585$tu),
+        xlim = range(results$ssp585$year),
+        ylim = if (is.null(ylim)) range(results$ssp585$tu) else ylim,
         xlab = "Year", ylab = "Temperature anomaly (relative to 1750)",
         main = plot_title
     )
@@ -163,25 +167,96 @@ legend(
 dev.off()
 
 ## RUN THE SCENARIO
-# 32% of methane is animal agriculture, based on:
-# https://www.unep.org/news-and-stories/story/methane-emissions-are-driving-climate-change-heres-how-reduce-them
-methane_scaling <- 1 - 0.32
 
+# CO2 mol. mass 44x10^-3 kg/mol
+# (https://en.wikipedia.org/wiki/Carbon_dioxide)
+co2_mm <- 44e-3   # kg / mol
+
+# approx. mass of atmosphere: 5.14×10^18 kg
+# https://homework.study.com/explanation/the-mass-of-the-earth-s-atmosphere-is-estimated-as-5-14-x-1015-t-1-t-1000-kg-the-average-molar-mass-of-air-is-28-8-g-mol-how-many-moles-of-gas-are-in-the-atmosphere.html
+atm_m <- 5.14e18  # kg
+
+# mean mol. mass of air 28.8x10^-3 kg/mol
+# https://homework.study.com/explanation/the-mass-of-the-earth-s-atmosphere-is-estimated-as-5-14-x-1015-t-1-t-1000-kg-the-average-molar-mass-of-air-is-28-8-g-mol-how-many-moles-of-gas-are-in-the-atmosphere.html
+air_mm <- 28.8e-3 # kg / mol
+
+# Total moles of molecules in the atmosphere
+tot_molecules <- atm_m / air_mm
+
+# Total moles of molecules in one ton of CO2
+co2_molecules <- 1000 / co2_mm
+
+# ppm of one ton of CO2 in the atmosphere
+co2_ppm <- co2_molecules * 1e6 / tot_molecules
+
+# Radiative forcing conversion
+# https://en.wikipedia.org/wiki/Radiative_forcing#Carbon_dioxide
+get_rf_delta <- function(tons_co2_equ) {
+    co2_0 <- 278   # ppm (est. in 1750)
+    5.35 * log((co2_0 + co2_ppm * tons_co2_equ) / co2_0)
+}
+
+# Vegan diet expected to save 0.4 - 2.1 tCO2eq per capita (per year?)
+# from page 803 of:
+# https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf
+veg_t_saved <- 1.2  # tCO2eq / capita / year
+
+# Read population projections.
+pop_data <- read.csv("data/iamc_db.csv")[-(11:15), ]
+pop_data <- subset(
+    pop_data,
+    # Use the projections from OECD
+    subset = Model == "OECD Env-Growth",
+    select = c(Scenario, X2010:X2100)
+)
+pop_data <- data.frame(
+    year = seq(2010, 2100, 5),
+    ssp1 = as.numeric(pop_data[pop_data$Scenario == "SSP1", -1]),
+    ssp2 = as.numeric(pop_data[pop_data$Scenario == "SSP2", -1]),
+    ssp3 = as.numeric(pop_data[pop_data$Scenario == "SSP3", -1]),
+    ssp4 = as.numeric(pop_data[pop_data$Scenario == "SSP4", -1]),
+    ssp5 = as.numeric(pop_data[pop_data$Scenario == "SSP5", -1])
+)
+
+# Create a dataframe that has values per year.
+pop_data <- pop_data[-(1:2),]
+pop_data <- pop_data[rep(seq_len(nrow(pop_data)), each = 5),][-(1:3),]
+# Extend this to 2500 -- by repeating the last value (i.e. assume
+# population plateaus)
+pop_data <- rbind(pop_data, pop_data[rep(nrow(pop_data), 396),])
+pop_data$year <- 2023:2500
+
+# Run, and account for lower radiative forcing from veganism.
 run_for_ssps(
-    "Model temperature anomaly projections, under a \nreduced methane scenario",
-    get_forcings = function(data) {
+    "Model temperature anomaly projections, under a \nvegan people scenario",
+    get_forcings = function(data, scenario) {
+        # Define a date range to look at.
+        rnge <- 2023:2104
         # Drop unnecessary columns.
-        reduced <- subset(
-            data,
-            select = -c(year, total, total_natural, total_anthropogenic)
-        )
+        reduced <- data$total
         # Get future and past values.
-        future <- reduced[data$year > 2022,]
-        past <- reduced[data$year <= 2022,]
-        # Scale future methane emissions.
-        future$ch4 <- future$ch4 * methane_scaling
+        future <- reduced[data$year  %in% rnge]
+        past <- reduced[data$year <= 2022]
+        # Scale future emissions.
+        future <- future - get_rf_delta(
+            veg_t_saved * pop_data[
+                pop_data$year %in% rnge,
+                substr(scenario, start = 1, stop = 4)
+            ]
+        )
         # Return the total values.
-        apply(rbind(past, future), 1, sum)
+        c(past, future)
     },
-    file_suffix = "_scenario"
+    file_suffix = "_scenario",
+    ylim = c(0,4)
+)
+
+# Get a reduced default, to compare.
+results <- run_for_ssps(
+    "Model temperature anomaly projections, relative to 1750",
+    get_forcings = function(data, scen) {
+        data$total[data$year < 2105]
+    },
+    file_suffix = "_default_red",
+    ylim = c(0,4)
 )
