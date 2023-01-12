@@ -27,7 +27,7 @@ gamma <- 2 * kappa * cp * rho / (hu + hd)   # J / deg / m^2 / s
 cu <- rho * cp * hu   # J / m^2 / deg
 cd <- rho * cp * hd   # J / m^2 / deg
 
-## DO THE SIMULATION
+## SIMULATION
 # Equations from "The inconstancy of the transient climate response
 # parameter under increasing CO2", Gregory et al., 2017.
 simulate <- function(
@@ -72,48 +72,65 @@ simulate <- function(
     ))
 }
 
-## RUN THE SIMULATION
-ssps <- c(
-    "ssp119", "ssp126", "ssp245", "ssp370", "ssp434", "ssp460", "ssp585"
-)
-
-results <- list()
-for (ssp in ssps) {
-    # Read the forcing data
-    data <- read.csv(paste(
-        "data/SSPs/ERF_", ssp, "_1750-2500.csv",
-        sep = ""
-    ))
-    # Use the total forcing values
-    forcing <- data$total
-    # Run the simulation.
-    results[[ssp]] <- simulate(
-        forcing, alpha, gamma, cu, cd, tr = 60 * 60 * 24 * 365
+## RUN THE SIMULATION FOR SSPS
+run_for_ssps <- function(
+    # Title of the plot output.
+    plot_title,
+    # Function to extract the forcing values from the data. Defaults to just
+    # using the total forcing values.
+    get_forcings = function(x) { x$total },
+    # Suffix to add to the output filenames. Defaults to an empty string.
+    file_suffix = ""
+) {
+    ssps <- c(
+        "ssp119", "ssp126", "ssp245", "ssp370", "ssp434", "ssp460", "ssp585"
     )
-}
 
-# Plot the temperatures of the upper layer, and save the data.
-pdf(file = "output/projections.pdf")
-n_lines <- length(results)
-colors <- rainbow(n_lines)
-plot(
-    1, type = "n",
-    xlim = c(1750, 2501), ylim = range(results$ssp585$tu),
-    xlab = "Year", ylab = "Temperature anomaly (relative to 1750)",
-    main = "Model temperature anomaly projections, relative to 1750"
-)
-for (i in 1:n_lines) {
-    lines(results[[i]]$year, results[[i]]$tu, type = "l", col = colors[i])
-    # Save the data.
-    write.csv(
-        result, file = paste(
-            "output/", names(results)[i], ".csv",
+    results <- list()
+    for (ssp in ssps) {
+        # Read the forcing data
+        data <- read.csv(paste(
+            "data/SSPs/ERF_", ssp, "_1750-2500.csv",
             sep = ""
-        ), quote = FALSE, row.names = FALSE
+        ))
+        # Extract the values for the forcing.
+        forcing <- get_forcings(data)
+        # Run the simulation.
+        results[[ssp]] <- simulate(
+            forcing, alpha, gamma, cu, cd, tr = 60 * 60 * 24 * 365
+        )
+    }
+
+    # Plot the temperatures of the upper layer, and save the data.
+    pdf(file = paste("output/projections", file_suffix, ".pdf", sep = ""))
+    n_lines <- length(results)
+    colors <- rainbow(n_lines)
+    plot(
+        1, type = "n",
+        xlim = c(1750, 2501), ylim = range(results$ssp585$tu),
+        xlab = "Year", ylab = "Temperature anomaly (relative to 1750)",
+        main = plot_title
     )
+    for (i in 1:n_lines) {
+        lines(results[[i]]$year, results[[i]]$tu, type = "l", col = colors[i])
+        # Save the data.
+        write.csv(
+            results[[i]], file = paste(
+                "output/", names(results)[i],
+                file_suffix, ".csv",
+                sep = ""
+            ), quote = FALSE, row.names = FALSE
+        )
+    }
+    legend("topleft", legend = names(results), fill = colors)
+    dev.off()
+    results
 }
-legend("topleft", legend = names(results), fill = colors)
-dev.off()
+
+results <- run_for_ssps(
+    "Model temperature anomaly projections, relative to 1750",
+    file_suffix = "_default"
+)
 
 ## COMPARE THE MODEL TO MEASUREMENTS
 out <- results[1]
@@ -144,3 +161,27 @@ legend(
     fill = c("red", "blue")
 )
 dev.off()
+
+## RUN THE SCENARIO
+# 32% of methane is animal agriculture, based on:
+# https://www.unep.org/news-and-stories/story/methane-emissions-are-driving-climate-change-heres-how-reduce-them
+methane_scaling <- 1 - 0.32
+
+run_for_ssps(
+    "Model temperature anomaly projections, under a reduced methane scenario",
+    get_forcings = function(data) {
+        # Drop unnecessary columns.
+        reduced <- subset(
+            data,
+            select = -c(year, total, total_natural, total_anthropogenic)
+        )
+        # Get future and past values.
+        future <- reduced[data$year > 2022,]
+        past <- reduced[data$year <= 2022,]
+        # Scale future methane emissions.
+        future$ch4 <- future$ch4 * methane_scaling
+        # Return the total values.
+        apply(rbind(past, future), 1, sum)
+    },
+    file_suffix = "_scenario"
+)
