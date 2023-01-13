@@ -115,6 +115,7 @@ run_for_ssps <- function(
         xlab = "Year", ylab = "Temperature anomaly (relative to 1750)",
         main = plot_title
     )
+    grid(NULL, NULL, lty = 6, col = "cornsilk2")
     for (i in 1:n_lines) {
         lines(results[[i]]$year, results[[i]]$tu, type = "l", col = colors[i])
         # Save the data.
@@ -126,7 +127,7 @@ run_for_ssps <- function(
             ), quote = FALSE, row.names = FALSE
         )
     }
-    legend("topleft", legend = names(results), fill = colors)
+    legend("topleft", legend = names(results), fill = colors, bg = "white")
     dev.off()
     results
 }
@@ -137,7 +138,7 @@ results <- run_for_ssps(
 )
 
 ## COMPARE THE MODEL TO MEASUREMENTS
-out <- results[1]
+out <- results[[1]]
 
 # This is the MET office data.
 validation_data <- read.csv("data/HadCRUT.5.0.1.0.summary_series.global.annual.csv")
@@ -158,11 +159,12 @@ plot(
     ylab = "Anomaly (relative to 1961-1990)",
     main = "Temperature anomaly relative to 1961-1990"
 )
+grid(NULL, NULL, lty = 6, col = "cornsilk2")
 lines(1850:2022, model_data, col = "blue")
 legend(
     "topleft",
     legend = c("MET measurements", "Model prediction"),
-    fill = c("red", "blue")
+    fill = c("red", "blue"), bg = "white"
 )
 dev.off()
 
@@ -199,7 +201,7 @@ get_rf_delta <- function(tons_co2_equ) {
 # Vegan diet expected to save 0.4 - 2.1 tCO2eq per capita (per year?)
 # from page 803 of:
 # https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf
-veg_t_saved <- 1.2  # tCO2eq / capita / year
+veg_t_saved <- 2.1  # tCO2eq / capita / year
 
 # Read population projections.
 pop_data <- read.csv("data/iamc_db.csv")[-(11:15), ]
@@ -226,8 +228,22 @@ pop_data <- pop_data[rep(seq_len(nrow(pop_data)), each = 5),][-(1:3),]
 pop_data <- rbind(pop_data, pop_data[rep(nrow(pop_data), 396),])
 pop_data$year <- 2023:2500
 
+# Calculate social cost of carbon for the reduction. Figure of $100 per ton,
+# from page 803 of:
+# https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf
+scc_per_ton <- 100   # USD
+scc_saved <- cbind(
+    pop_data$year,
+    scc_per_ton * 1e6 *   # pop. data in millions
+        subset(pop_data, select = -year)
+)
+write.csv(
+    scc_saved, file = "output/scc_saved.csv",
+    quote = FALSE, row.names = FALSE
+)
+
 # Run, and account for lower radiative forcing from veganism.
-run_for_ssps(
+exp_results <- run_for_ssps(
     "Model temperature anomaly projections, under a \nvegan people scenario",
     get_forcings = function(data, scenario) {
         # Define a date range to look at.
@@ -248,15 +264,44 @@ run_for_ssps(
         c(past, future)
     },
     file_suffix = "_scenario",
-    ylim = c(0,4)
+    ylim = c(0, 4)
 )
 
 # Get a reduced default, to compare.
-results <- run_for_ssps(
+red_results <- run_for_ssps(
     "Model temperature anomaly projections, relative to 1750",
     get_forcings = function(data, scen) {
         data$total[data$year < 2105]
     },
     file_suffix = "_default_red",
-    ylim = c(0,4)
+    ylim = c(0, 4)
 )
+
+# Plot the difference between the results.
+ssps <- c(
+    "ssp119", "ssp126", "ssp245", "ssp370", "ssp434", "ssp460", "ssp585"
+)
+colors <- c(
+    "blue", "azure4", "blueviolet", "darkred",
+    "chartreuse", "darkgoldenrod1", "deeppink"
+)
+
+pdf(file = "output/exp_diff.pdf")
+plot(
+    1, type = "n",
+    xlim = c(2022, 2100),
+    ylim = c(0, 0.03),
+    xlab = "Year", ylab = "Temperature anomaly difference",
+    main = "Projected difference in temperature anomaly, under\na vegan people scenario"
+)
+grid(NULL, NULL, lty = 6, col = "cornsilk2")
+for (i in 1:length(ssps)) {
+    # Plot a line for the difference between the experiment and the baseline.
+    lines(
+        exp_results[[ssps[i]]]$year,
+        red_results[[ssps[i]]]$tu - exp_results[[ssps[i]]]$tu,
+        type = "l", col = colors[i], lwd = 1.2
+    )
+}
+legend("topleft", legend = ssps, fill = colors, bg = "white")
+dev.off()
